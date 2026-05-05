@@ -181,21 +181,29 @@
     </button>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    let items = JSON.parse(localStorage.getItem('shopping') || '[]');
+    const SUPABASE_URL = 'https://wfqckpaulmrqrstmisyx.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_oZbgEtCPUgl1kDUkIfqnPA_vjJ-FdLL';
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    const input   = document.getElementById('itemInput');
-    const list    = document.getElementById('list');
-    const stats   = document.getElementById('stats');
+    const input    = document.getElementById('itemInput');
+    const list     = document.getElementById('list');
+    const stats    = document.getElementById('stats');
     const clearBtn = document.getElementById('clearBtn');
 
     input.addEventListener('keydown', e => { if (e.key === 'Enter') addItem(); });
 
-    function save() {
-      localStorage.setItem('shopping', JSON.stringify(items));
+    async function refresh() {
+      const { data, error } = await sb
+        .from('shopping_items')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) { console.error(error); return; }
+      render(data || []);
     }
 
-    function render() {
+    function render(items) {
       list.innerHTML = '';
 
       if (items.length === 0) {
@@ -209,14 +217,14 @@
       stats.innerHTML = `총 <strong>${items.length}</strong>개 · 완료 <strong>${done}</strong>개`;
       clearBtn.style.display = done > 0 ? 'block' : 'none';
 
-      items.forEach((item, idx) => {
+      items.forEach(item => {
         const li = document.createElement('li');
         if (item.checked) li.classList.add('checked');
 
         const cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.checked = item.checked;
-        cb.addEventListener('change', () => { items[idx].checked = cb.checked; save(); render(); });
+        cb.addEventListener('change', () => toggleItem(item.id, cb.checked));
 
         const span = document.createElement('span');
         span.className = 'item-text';
@@ -226,7 +234,7 @@
         del.className = 'delete-btn';
         del.title = '삭제';
         del.textContent = '✕';
-        del.addEventListener('click', () => { items.splice(idx, 1); save(); render(); });
+        del.addEventListener('click', () => deleteItem(item.id));
 
         li.appendChild(cb);
         li.appendChild(span);
@@ -235,23 +243,35 @@
       });
     }
 
-    function addItem() {
+    async function addItem() {
       const name = input.value.trim();
       if (!name) return;
-      items.unshift({ name, checked: false });
+      const { error } = await sb.from('shopping_items').insert({ name, checked: false });
+      if (error) { console.error(error); return; }
       input.value = '';
-      save();
-      render();
       input.focus();
+      await refresh();
     }
 
-    function clearChecked() {
-      items = items.filter(i => !i.checked);
-      save();
-      render();
+    async function toggleItem(id, checked) {
+      const { error } = await sb.from('shopping_items').update({ checked }).eq('id', id);
+      if (error) { console.error(error); return; }
+      await refresh();
     }
 
-    render();
+    async function deleteItem(id) {
+      const { error } = await sb.from('shopping_items').delete().eq('id', id);
+      if (error) { console.error(error); return; }
+      await refresh();
+    }
+
+    async function clearChecked() {
+      const { error } = await sb.from('shopping_items').delete().eq('checked', true);
+      if (error) { console.error(error); return; }
+      await refresh();
+    }
+
+    refresh();
   </script>
 </body>
 </html>
